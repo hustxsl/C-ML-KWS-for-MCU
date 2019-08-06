@@ -88,12 +88,14 @@ import models
 from tensorflow.python.platform import gfile
 from tensorflow.contrib import slim as slim 
 
-FLAGS = None
+def train(verbose = True):
+  tf.reset_default_graph()
 
-
-def main(_):
-  # We want to see all the logging messages for this tutorial.
-  tf.logging.set_verbosity(tf.logging.INFO)
+  if verbose:
+    # We want to see all the logging messages for this tutorial.
+    tf.logging.set_verbosity(tf.logging.INFO)
+  else:
+    tf.logging.set_verbosity(tf.logging.ERROR)
 
   # Start a new TensorFlow session.
   sess = tf.InteractiveSession()
@@ -317,6 +319,13 @@ def main(_):
     tf.logging.info('Final test accuracy = %.2f%% (N=%d)' % (total_accuracy * 100,
                                                              set_size))
 
+  train_writer.close()
+  validation_writer.close()
+  sess.close()
+  return best_accuracy, num_params
+
+def main(_):
+  train()
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
