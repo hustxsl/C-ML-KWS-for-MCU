@@ -99,55 +99,63 @@ def write_ds_cnn_h_beginning(f, wanted_words, sample_rate, clip_duration_ms,
 def write_ds_cnn_h_end(f, num_layers):
   f.write(
     '#define SCRATCH_BUFFER_SIZE (2*2*CONV1_OUT_CH*CONV2_DS_KX*CONV2_DS_KY + 2*CONV2_OUT_CH*CONV2_OUT_X*CONV2_OUT_Y)\n\n')
-  f.write('class DS_CNN : public NN {\n\n')
-  f.write('  public:\n')
-  f.write('    DS_CNN();\n')
-  f.write('    ~DS_CNN();\n')
-  f.write('    void run_nn(q7_t* in_data, q7_t* out_data);\n\n')
-  f.write('  private:\n')
-  f.write('    q7_t* scratch_pad;\n')
-  f.write('    q7_t* col_buffer;\n')
-  f.write('    q7_t* buffer1;\n')
-  f.write('    q7_t* buffer2;\n')
-  f.write('    static q7_t const conv1_wt[CONV1_OUT_CH*CONV1_KX*CONV1_KY];\n')
-  f.write('    static q7_t const conv1_bias[CONV1_OUT_CH];\n')
-
-  for layer_no in range(2, num_layers + 1):
-    f.write(
-      '    static q7_t const conv{1}_ds_wt[CONV{0}_OUT_CH*CONV{1}_DS_KX*CONV{1}_DS_KY];\n'.format(layer_no - 1, layer_no))
-    f.write('    static q7_t const conv{1}_ds_bias[CONV{0}_OUT_CH];\n'.format(layer_no - 1, layer_no))
-    f.write('    static q7_t const conv{1}_pw_wt[CONV{1}_OUT_CH*CONV{0}_OUT_CH];\n'.format(layer_no - 1, layer_no))
-    f.write('    static q7_t const conv{0}_pw_bias[CONV{0}_OUT_CH];\n'.format(layer_no))
-
-  f.write('    static q7_t const final_fc_wt[CONV{}_OUT_CH*OUT_DIM];\n'.format(num_layers))
-  f.write('    static q7_t const final_fc_bias[OUT_DIM];\n\n')
-  f.write('};\n\n')
   f.write('#endif\n')
 
-def write_ds_cnn_cpp_file(fname, num_layers):
+def write_ds_cnn_c_file(fname, num_layers):
   f = open(fname, 'wb')
   f.close()
   with open(fname, 'a') as f:
-    f.write('#include "ds_cnn.h"\n\n')
+    f.write('#include "ds_cnn.h"\n')
+    f.write('#include "stdlib.h"\n\n')
+
+    f.write('static int frame_len;\n')
+    f.write('static int frame_shift;\n')
+    f.write('static int num_mfcc_features;\n')
+    f.write('static int num_frames;\n')
+    f.write('static int num_out_classes;\n')
+    f.write('static int in_dec_bits;\n\n')
+    f.write('static q7_t* scratch_pad;\n')
+    f.write('static q7_t* col_buffer;\n')
+    f.write('static q7_t* buffer1;\n')
+    f.write('static q7_t* buffer2;\n\n')
 
     for layer_no in range(0, num_layers):
       if layer_no == 0:
-        f.write("const q7_t DS_CNN::conv1_wt[CONV1_OUT_CH*CONV1_KX*CONV1_KY]=CONV1_WT;\n")
-        f.write("const q7_t DS_CNN::conv1_bias[CONV1_OUT_CH]=CONV1_BIAS;\n")
+        f.write("static const q7_t conv1_wt[CONV1_OUT_CH*CONV1_KX*CONV1_KY]=CONV1_WT;\n")
+        f.write("static const q7_t conv1_bias[CONV1_OUT_CH]=CONV1_BIAS;\n")
       else:
         f.write(
-          "const q7_t DS_CNN::conv{1}_ds_wt[CONV{0}_OUT_CH*CONV{1}_DS_KX*CONV{1}_DS_KY]=CONV{1}_DS_WT;\n".format(layer_no, layer_no + 1))
-        f.write("const q7_t DS_CNN::conv{1}_ds_bias[CONV{0}_OUT_CH]=CONV{1}_DS_BIAS;\n".format(layer_no, layer_no + 1))
+          "static const q7_t conv{1}_ds_wt[CONV{0}_OUT_CH*CONV{1}_DS_KX*CONV{1}_DS_KY]=CONV{1}_DS_WT;\n".format(layer_no, layer_no + 1))
+        f.write("static const q7_t conv{1}_ds_bias[CONV{0}_OUT_CH]=CONV{1}_DS_BIAS;\n".format(layer_no, layer_no + 1))
         f.write(
-          "const q7_t DS_CNN::conv{1}_pw_wt[CONV{1}_OUT_CH*CONV{0}_OUT_CH]=CONV{1}_PW_WT;\n".format(layer_no, layer_no + 1))
-        f.write("const q7_t DS_CNN::conv{0}_pw_bias[CONV{0}_OUT_CH]=CONV{0}_PW_BIAS;\n".format(layer_no + 1))
+          "static const q7_t conv{1}_pw_wt[CONV{1}_OUT_CH*CONV{0}_OUT_CH]=CONV{1}_PW_WT;\n".format(layer_no, layer_no + 1))
+        f.write("static const q7_t conv{0}_pw_bias[CONV{0}_OUT_CH]=CONV{0}_PW_BIAS;\n".format(layer_no + 1))
 
-    f.write("const q7_t DS_CNN::final_fc_wt[CONV{0}_OUT_CH*OUT_DIM]=FINAL_FC_WT;\n".format(num_layers))
-    f.write("const q7_t DS_CNN::final_fc_bias[OUT_DIM]=FINAL_FC_BIAS;\n\n")
+    f.write("static const q7_t final_fc_wt[CONV{0}_OUT_CH*OUT_DIM]=FINAL_FC_WT;\n".format(num_layers))
+    f.write("static const q7_t final_fc_bias[OUT_DIM]=FINAL_FC_BIAS;\n\n")
 
-    f.write("DS_CNN::DS_CNN()\n")
+    f.write('int nn_get_frame_len() {\n')
+    f.write('  return frame_len;\n')
+    f.write('}\n\n')
+    f.write('int nn_get_frame_shift() {\n')
+    f.write('  return frame_shift;\n')
+    f.write('}\n\n')
+    f.write('int nn_get_num_mfcc_features() {\n')
+    f.write('  return num_mfcc_features;\n')
+    f.write('}\n\n')
+    f.write('int nn_get_num_frames() {\n')
+    f.write('  return num_frames;\n')
+    f.write('}\n\n')
+    f.write('int nn_get_num_out_classes() {\n')
+    f.write('  return num_out_classes;\n')
+    f.write('}\n\n')
+    f.write('int nn_get_in_dec_bits() {\n')
+    f.write('  return in_dec_bits;\n')
+    f.write('}\n\n')
+
+    f.write("void nn_init()\n")
     f.write("{\n")
-    f.write("  scratch_pad = new q7_t[SCRATCH_BUFFER_SIZE];\n")
+    f.write('  scratch_pad = malloc(sizeof(q7_t) * SCRATCH_BUFFER_SIZE);\n')
     f.write("  buffer1 = scratch_pad;\n")
     f.write("  buffer2 = buffer1 + (CONV1_OUT_CH*CONV1_OUT_X*CONV1_OUT_Y);\n")
     f.write("  col_buffer = buffer2 + (CONV2_OUT_CH*CONV2_OUT_X*CONV2_OUT_Y);\n")
@@ -159,12 +167,12 @@ def write_ds_cnn_cpp_file(fname, num_layers):
     f.write("  in_dec_bits = MFCC_DEC_BITS;\n")
     f.write("}\n\n")
 
-    f.write("DS_CNN::~DS_CNN()\n")
-    f.write("{\n")
-    f.write("  delete scratch_pad;\n")
-    f.write("}\n\n")
+    f.write('void nn_deinit()\n')
+    f.write('{\n')
+    f.write('  free(scratch_pad);\n')
+    f.write('}\n\n')
 
-    f.write("void DS_CNN::run_nn(q7_t* in_data, q7_t* out_data)\n")
+    f.write("void nn_run_nn(q7_t* in_data, q7_t* out_data)\n")
     f.write("{\n")
     for layer_no in range(0, num_layers):
       if layer_no == 0:

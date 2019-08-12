@@ -101,7 +101,7 @@ def run_quant_inference(wanted_words, sample_rate, clip_duration_ms,
 
   if model_architecture == "ds_cnn":
     num_layers = model_size_info[0]
-    helper.write_ds_cnn_cpp_file('ds_cnn.cpp', num_layers)
+    helper.write_ds_cnn_c_file('ds_cnn.c', num_layers)
 
     ds_cnn_h_fname = "ds_cnn.h"
     weights_h_fname = "ds_cnn_weights.h"
