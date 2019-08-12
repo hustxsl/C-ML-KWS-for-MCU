@@ -61,8 +61,18 @@ def run_quant_inference(wanted_words, sample_rate, clip_duration_ms,
   audio_processor = input_data.AudioProcessor(
       FLAGS.data_url, FLAGS.data_dir, FLAGS.silence_percentage,
       FLAGS.unknown_percentage,
-      FLAGS.wanted_words.split(','), FLAGS.validation_percentage,
+      FLAGS.wanted_words.split(','),
+      100 - FLAGS.training_percentage - FLAGS.testing_percentage,
       FLAGS.testing_percentage, model_settings)
+
+  if FLAGS.validation_dir is None:
+    FLAGS.validation_dir = FLAGS.data_dir
+  validation_audio_processor = input_data.AudioProcessor(
+      FLAGS.data_url, FLAGS.validation_dir, FLAGS.silence_percentage,
+      FLAGS.unknown_percentage,
+      FLAGS.wanted_words.split(','),
+      FLAGS.validation_percentage, 0,
+      model_settings)
   
   label_count = model_settings['label_count']
   fingerprint_size = model_settings['fingerprint_size']
@@ -149,14 +159,15 @@ def run_quant_inference(wanted_words, sample_rate, clip_duration_ms,
                   (total_accuracy * 100, set_size))
 
   # validation set
-  set_size = audio_processor.set_size('validation')
+  set_size = validation_audio_processor.set_size('validation')
   tf.logging.info('set_size=%d', set_size)
   total_accuracy = 0
   total_conf_matrix = None
   for i in xrange(0, set_size, FLAGS.batch_size):
     validation_fingerprints, validation_ground_truth = (
-        audio_processor.get_data(FLAGS.batch_size, i, model_settings, 0.0,
-                                 0.0, 0, 'validation', sess))
+        validation_audio_processor.get_data(FLAGS.batch_size, i,
+                                            model_settings, 0.0,
+                                            0.0, 0, 'validation', sess))
     validation_accuracy, conf_matrix = sess.run(
         [evaluation_step, confusion_matrix],
         feed_dict={
@@ -223,6 +234,13 @@ if __name__ == '__main__':
       Where to download the speech training data to.
       """)
   parser.add_argument(
+      '--validation_dir',
+      type=str,
+      default=None,
+      help="""\
+      Where to get the speech validation data.
+      """)
+  parser.add_argument(
       '--silence_percentage',
       type=float,
       default=10.0,
@@ -246,6 +264,11 @@ if __name__ == '__main__':
       type=int,
       default=10,
       help='What percentage of wavs to use as a validation set.')
+  parser.add_argument(
+      '--training_percentage',
+      type=int,
+      default=80,
+      help='What percentage of wavs to use as a training set.')
   parser.add_argument(
       '--sample_rate',
       type=int,

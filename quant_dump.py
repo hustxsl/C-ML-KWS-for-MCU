@@ -236,6 +236,13 @@ if __name__ == '__main__':
       Where to download the speech training data to.
       """)
   parser.add_argument(
+      '--validation_dir',
+      type=str,
+      default=None,
+      help="""\
+      Where to get the speech validation data.
+      """)
+  parser.add_argument(
       '--silence_percentage',
       type=float,
       default=10.0,
@@ -254,6 +261,11 @@ if __name__ == '__main__':
       type=int,
       default=10,
       help='What percentage of wavs to use as a validation set.')
+  parser.add_argument(
+      '--training_percentage',
+      type=int,
+      default=80,
+      help='What percentage of wavs to use as a training set.')
   parser.add_argument(
       '--sample_rate',
       type=int,

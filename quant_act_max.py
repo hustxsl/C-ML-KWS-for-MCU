@@ -75,9 +75,10 @@ def run_quant_inference(act_max):
       len(words_list), sample_rate, clip_duration_ms, window_size_ms,
       window_stride_ms, dct_coefficient_count)
 
-  # do fully validation
-  audio_processor = input_data.AudioProcessor(
-      FLAGS.data_url, FLAGS.data_dir, FLAGS.silence_percentage,
+  if FLAGS.validation_dir is None:
+    FLAGS.validation_dir = FLAGS.data_dir
+  validation_audio_processor = input_data.AudioProcessor(
+      FLAGS.data_url, FLAGS.validation_dir, FLAGS.silence_percentage,
       FLAGS.unknown_percentage,
       FLAGS.wanted_words.split(','),
       100, 0, model_settings)
@@ -147,14 +148,15 @@ def run_quant_inference(act_max):
       layer_no += 1
 
   # validation set
-  set_size = audio_processor.set_size('validation')
+  set_size = validation_audio_processor.set_size('validation')
   tf.logging.info('set_size=%d', set_size)
   total_accuracy = 0
   total_conf_matrix = None
   for i in xrange(0, set_size, FLAGS.batch_size):
     validation_fingerprints, validation_ground_truth = (
-        audio_processor.get_data(FLAGS.batch_size, i, model_settings, 0.0,
-                                 0.0, 0, 'validation', sess))
+        validation_audio_processor.get_data(FLAGS.batch_size, i,
+                                            model_settings, 0.0,
+                                            0.0, 0, 'validation', sess))
     validation_accuracy, conf_matrix = sess.run(
         [evaluation_step, confusion_matrix],
         feed_dict={
@@ -167,6 +169,9 @@ def run_quant_inference(act_max):
       total_conf_matrix = conf_matrix
     else:
       total_conf_matrix += conf_matrix
+  tf.logging.info('Confusion Matrix:\n %s' % (total_conf_matrix))
+  tf.logging.info('Validation accuracy = %.2f%% (N=%d)' %
+                  (total_accuracy * 100, set_size))
 
   tf.reset_default_graph()
   sess.close()
@@ -247,6 +252,13 @@ if __name__ == '__main__':
       default='/tmp/speech_dataset/',
       help="""\
       Where to download the speech training data to.
+      """)
+  parser.add_argument(
+      '--validation_dir',
+      type=str,
+      default=None,
+      help="""\
+      Where to get the speech validation data.
       """)
   parser.add_argument(
       '--silence_percentage',

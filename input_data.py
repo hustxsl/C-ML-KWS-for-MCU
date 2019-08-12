@@ -263,7 +263,7 @@ class AudioProcessor(object):
                         ', '.join(all_words.keys()))
     # We need an arbitrary file to load as the input for the silence samples.
     # It's multiplied by zero later, so the content doesn't matter.
-    silence_wav_path = self.data_index['training'][0]['file']
+    silence_wav_path = self.data_index[set_index][0]['file']
     for set_index in ['validation', 'testing', 'training']:
       set_size = len(self.data_index[set_index])
       silence_size = int(math.ceil(set_size * silence_percentage / 100))

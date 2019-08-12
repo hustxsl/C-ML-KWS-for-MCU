@@ -105,11 +105,23 @@ def main(_):
       len(input_data.prepare_words_list(FLAGS.wanted_words.split(','))),
       FLAGS.sample_rate, FLAGS.clip_duration_ms, FLAGS.window_size_ms,
       FLAGS.window_stride_ms, FLAGS.dct_coefficient_count)
+
   audio_processor = input_data.AudioProcessor(
       FLAGS.data_url, FLAGS.data_dir, FLAGS.silence_percentage,
       FLAGS.unknown_percentage,
-      FLAGS.wanted_words.split(','), FLAGS.validation_percentage,
+      FLAGS.wanted_words.split(','),
+      100 - FLAGS.training_percentage - FLAGS.testing_percentage,
       FLAGS.testing_percentage, model_settings)
+
+  if FLAGS.validation_dir is None:
+    FLAGS.validation_dir = FLAGS.data_dir
+  validation_audio_processor = input_data.AudioProcessor(
+      FLAGS.data_url, FLAGS.validation_dir, FLAGS.silence_percentage,
+      FLAGS.unknown_percentage,
+      FLAGS.wanted_words.split(','),
+      FLAGS.validation_percentage, 0,
+      model_settings)
+
   fingerprint_size = model_settings['fingerprint_size']
   label_count = model_settings['label_count']
   time_shift_samples = int((FLAGS.time_shift_ms * FLAGS.sample_rate) / 1000)
@@ -242,13 +254,14 @@ def main(_):
                      cross_entropy_value))
     is_last_step = (training_step == training_steps_max)
     if (training_step % FLAGS.eval_step_interval) == 0 or is_last_step:
-      set_size = audio_processor.set_size('validation')
+      set_size = validation_audio_processor.set_size('validation')
       total_accuracy = 0
       total_conf_matrix = None
       for i in xrange(0, set_size, FLAGS.batch_size):
         validation_fingerprints, validation_ground_truth = (
-            audio_processor.get_data(FLAGS.batch_size, i, model_settings, 0.0,
-                                     0.0, 0, 'validation', sess))
+            validation_audio_processor.get_data(FLAGS.batch_size, i,
+                                                model_settings, 0.0,
+                                                0.0, 0, 'validation', sess))
 
         # Run a validation step and capture training summaries for TensorBoard
         # with the `merged` op.
@@ -280,28 +293,29 @@ def main(_):
       tf.logging.info('So far the best validation accuracy is %.2f%%' % (best_accuracy*100))
 
   set_size = audio_processor.set_size('testing')
-  tf.logging.info('set_size=%d', set_size)
-  total_accuracy = 0
-  total_conf_matrix = None
-  for i in xrange(0, set_size, FLAGS.batch_size):
-    test_fingerprints, test_ground_truth = audio_processor.get_data(
-        FLAGS.batch_size, i, model_settings, 0.0, 0.0, 0, 'testing', sess)
-    test_accuracy, conf_matrix = sess.run(
-        [evaluation_step, confusion_matrix],
-        feed_dict={
-            fingerprint_input: test_fingerprints,
-            ground_truth_input: test_ground_truth,
-            dropout_prob: 1.0
-        })
-    batch_size = min(FLAGS.batch_size, set_size - i)
-    total_accuracy += (test_accuracy * batch_size) / set_size
-    if total_conf_matrix is None:
-      total_conf_matrix = conf_matrix
-    else:
-      total_conf_matrix += conf_matrix
-  tf.logging.info('Confusion Matrix:\n %s' % (total_conf_matrix))
-  tf.logging.info('Final test accuracy = %.2f%% (N=%d)' % (total_accuracy * 100,
-                                                           set_size))
+  if set_size != 0:
+    tf.logging.info('set_size=%d', set_size)
+    total_accuracy = 0
+    total_conf_matrix = None
+    for i in xrange(0, set_size, FLAGS.batch_size):
+      test_fingerprints, test_ground_truth = audio_processor.get_data(
+          FLAGS.batch_size, i, model_settings, 0.0, 0.0, 0, 'testing', sess)
+      test_accuracy, conf_matrix = sess.run(
+          [evaluation_step, confusion_matrix],
+          feed_dict={
+              fingerprint_input: test_fingerprints,
+              ground_truth_input: test_ground_truth,
+              dropout_prob: 1.0
+          })
+      batch_size = min(FLAGS.batch_size, set_size - i)
+      total_accuracy += (test_accuracy * batch_size) / set_size
+      if total_conf_matrix is None:
+        total_conf_matrix = conf_matrix
+      else:
+        total_conf_matrix += conf_matrix
+    tf.logging.info('Confusion Matrix:\n %s' % (total_conf_matrix))
+    tf.logging.info('Final test accuracy = %.2f%% (N=%d)' % (total_accuracy * 100,
+                                                             set_size))
 
 
 if __name__ == '__main__':
@@ -319,6 +333,13 @@ if __name__ == '__main__':
       default='/tmp/speech_dataset/',
       help="""\
       Where to download the speech training data to.
+      """)
+  parser.add_argument(
+      '--validation_dir',
+      type=str,
+      default=None,
+      help="""\
+      Where to get the speech validation data.
       """)
   parser.add_argument(
       '--background_volume',
@@ -365,6 +386,11 @@ if __name__ == '__main__':
       type=int,
       default=10,
       help='What percentage of wavs to use as a validation set.')
+  parser.add_argument(
+      '--training_percentage',
+      type=int,
+      default=80,
+      help='What percentage of wavs to use as a training set.')
   parser.add_argument(
       '--sample_rate',
       type=int,
