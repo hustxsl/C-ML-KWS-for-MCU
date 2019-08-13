@@ -23,7 +23,7 @@ void arm_avepool_q7_HWC_nonsquare (
         const uint16_t dim_im_out_y,  
         q7_t * bufferA,             
         q7_t * Im_out,
-        const uint16_t out_lshift);
+        const int16_t out_lshift);
 
 
 #ifdef __cplusplus

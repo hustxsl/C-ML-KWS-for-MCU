@@ -22,7 +22,7 @@ void arm_avepool_q7_HWC_nonsquare (
         const uint16_t dim_im_out_y,  // output image dimension
         q7_t * bufferA,               // a buffer for local storage
         q7_t * Im_out,                // output feature
-        const uint16_t out_lshift)    // output left shift (scaling)
+        const int16_t out_lshift)     // output left shift (scaling)
 {
   int16_t i_ch_in, i_x, i_y;
   int16_t k_x, k_y;
@@ -40,7 +40,11 @@ void arm_avepool_q7_HWC_nonsquare (
             }
           }
         }
-        sum = round(sum*(0x1<<out_lshift)/count);
+
+        if (out_lshift > 0)
+          sum *= (1<<out_lshift);
+
+        sum = round(sum/count);
 
         if(sum >= 127)
           sum = 127;

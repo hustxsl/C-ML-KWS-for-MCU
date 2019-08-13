@@ -59,10 +59,6 @@ def run_quant_inference(act_max):
   model_architecture = FLAGS.model_architecture
   model_size_info = FLAGS.model_size_info
 
-  if act_max[len(act_max) - 3] < act_max[len(act_max) - 2]:
-    print("CMSIS-5 NN doesn't support negative shift now!")
-    return -1
-
   total_layers = len(act_max)
   layer_no = 1
   weights_dec_bits = 0
@@ -184,17 +180,9 @@ def get_best_act_max(act_max):
   if act_max is None:
     act_max = act_max_unlimit
 
-  start_layer = 0
-  if act_max[len(act_max) - 2] > act_max[len(act_max) - 3]:
-    print("CMSIS-5 NN doesn't support negative shift now!")
-    act_max[len(act_max) - 3] = 0
-    act_max[len(act_max) - 2] = 0
-    act_max[len(act_max) - 1] = 0
-    start_layer = len(act_max) - 3
-  else:
-    for start_layer in range(len(act_max) - 1, -1, -1):
-      if act_max[start_layer] > 0:
-        break
+  for start_layer in range(len(act_max) - 1, -1, -1):
+    if act_max[start_layer] > 0:
+      break
 
   print("Start with - Layer: {}".format(start_layer))
   print("act_max: {}".format(act_max))
@@ -206,18 +194,12 @@ def get_best_act_max(act_max):
     best = 0
     best_act_max = 0
 
-    if act_layer == len(act_max) - 2:
-      act_max[act_layer] = 0
-
     for i in range(8):
       maximum = 2**i
       if act_max[act_layer] > maximum:
         continue
 
       act_max[act_layer] = maximum
-
-      if act_layer == len(act_max) - 3:
-        act_max[act_layer + 1] = act_max[act_layer]
 
       print("Training next - Layer: {} | Max: {}".format(act_layer, maximum))
       print("act_max: {}".format(act_max))

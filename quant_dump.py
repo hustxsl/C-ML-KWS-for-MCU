@@ -206,6 +206,10 @@ def run_quant_inference(wanted_words, sample_rate, clip_duration_ms,
   if model_architecture == "ds_cnn":
     input_dec_bits = 7 - np.log2(act_max[len(act_max) - 3])
     output_dec_bits = 7 - np.log2(act_max[len(act_max) - 2])
+
+    if input_dec_bits > output_dec_bits:
+      output_dec_bits = input_dec_bits
+
     with open(ds_cnn_h_fname, 'a') as f:
       f.write("#define AVG_POOL_OUT_LSHIFT {}\n\n".format(int(output_dec_bits - input_dec_bits)))
       helper.write_ds_cnn_h_end(f, num_layers)
