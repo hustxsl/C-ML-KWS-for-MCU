@@ -34,11 +34,25 @@ int kws_num_out_classes;
 int kws_audio_block_size;
 int kws_audio_buffer_size;
 
+#define FRAME_TAIL (kws_frame_len - kws_frame_shift)
+
 static q7_t *mfcc_buffer;
 static int num_mfcc_features;
 
 static int recording_win;
 static int sliding_window_len;
+
+#define KWS_STARTED 1
+#define KWS_STANDBY 2
+#define KWS_SLEEPING 3
+#define KWS_STOPPED 4
+static int kws_state;
+static int kws_silence_count;
+static int kws_silence_threshold;
+
+//caching tail buffer
+static int16_t *kws_audio_cache_buffer;
+static int kws_audio_cache_size;
 
 static void kws_deinit()
 {
@@ -63,7 +77,16 @@ static void kws_init()
   kws_averaged_output = malloc(sizeof(q7_t) * kws_num_out_classes);
   kws_predictions = malloc(sizeof(q7_t) * sliding_window_len*kws_num_out_classes);
   kws_audio_block_size = recording_win*kws_frame_shift;
-  kws_audio_buffer_size = kws_audio_block_size + kws_frame_len - kws_frame_shift;
+  kws_audio_buffer_size = kws_audio_block_size + FRAME_TAIL;
+
+  kws_state = KWS_STANDBY;
+  kws_silence_count = 0;
+
+  //consider 1s silence as inactive
+  kws_silence_threshold = SAMP_FREQ / kws_frame_shift;
+
+  kws_audio_cache_buffer = malloc(sizeof(int16_t) * kws_frame_len * 2);
+  kws_audio_cache_size = 0;
 }
 
 void kws_nn_init(int record_win, int sliding_win_len)
@@ -89,22 +112,135 @@ void kws_nn_deinit()
   nn_deinit();
 }
 
+void kws_enable(int enable)
+{
+  if (enable && kws_state == KWS_STOPPED) {
+    kws_state = KWS_STANDBY;
+    //printf("%s, %d enabled!\n", __func__, __LINE__);
+  } else if (!enable && kws_state != KWS_STOPPED) {
+    kws_state = KWS_STOPPED;
+    //printf("%s, %d disabled!\n", __func__, __LINE__);
+  }
+}
+
+static void kws_extract_features_with_frames(int16_t *frames, int num_frames)
+{
+  q7_t *mfcc_buffer_head;
+  int silence;
+
+  if (kws_state == KWS_STOPPED)
+    return;
+
+  if (kws_state == KWS_SLEEPING) {
+    //put pending features to the end of buffer
+    mfcc_buffer_head = mfcc_buffer+(kws_num_frames-1)*num_mfcc_features;
+  } else {
+    //move old features left
+    memmove(mfcc_buffer,mfcc_buffer+num_frames*num_mfcc_features,sizeof(q7_t)*(kws_num_frames-num_frames)*num_mfcc_features);
+    //compute features only for the new audio
+    mfcc_buffer_head = mfcc_buffer+(kws_num_frames-num_frames)*num_mfcc_features;
+  }
+
+  while (num_frames--) {
+    silence = mfcc_compute(frames,mfcc_buffer_head);
+    frames += kws_frame_shift;
+
+    if (silence && kws_state != KWS_SLEEPING)
+      kws_silence_count++;
+    else
+      kws_silence_count = 0;
+
+    //handle sleep
+    if (kws_silence_count >= kws_num_frames) {
+      //printf("%s, %d sleeping!\n", __func__, __LINE__);
+      kws_state = KWS_SLEEPING;
+      break;
+    }
+
+    //handle active
+    if (kws_state != KWS_STARTED && !silence) {
+      //printf("%s, %d starting!\n", __func__, __LINE__);
+
+      //fill the old features with silence
+      memset(mfcc_buffer,0,sizeof(q7_t)*(kws_num_frames-1)*num_mfcc_features);
+      for (int j = 0; j < kws_num_frames-1; j++)
+        mfcc_buffer[j*num_mfcc_features] = -127;
+
+      kws_state = KWS_STARTED;
+      break;
+    }
+
+    //handle inactive
+    if (kws_state == KWS_STARTED && kws_silence_count >= kws_silence_threshold) {
+      //printf("%s, %d standby!\n", __func__, __LINE__);
+      kws_state = KWS_STANDBY;
+    }
+
+    //forward mfcc buffer
+    if (kws_state != KWS_SLEEPING)
+      mfcc_buffer_head += num_mfcc_features;
+  }
+
+  //handle remaining frames
+  if (num_frames > 0)
+    kws_extract_features_with_frames(frames, num_frames);
+}
+
+void kws_extract_features_with_buffer(int16_t *buffer, int size)
+{
+  int num_frames;
+
+  if (kws_audio_cache_size) {
+    //extend the cache buffer to frames and process it
+    num_frames = kws_audio_cache_size/kws_frame_shift+1;
+    int extra_size = num_frames*kws_frame_shift+FRAME_TAIL-kws_audio_cache_size;
+
+    //no enough data to process
+    if (extra_size > size) {
+      num_frames = 0;
+      goto out;
+    }
+
+    memcpy(kws_audio_cache_buffer+kws_audio_cache_size,buffer,sizeof(int16_t)*extra_size);
+    kws_extract_features_with_frames(kws_audio_cache_buffer, num_frames);
+
+    //keep an extra frame to make the features contiguous
+    extra_size -= kws_frame_shift;
+    buffer += extra_size;
+    size -= extra_size;
+  }
+
+  num_frames = (size-FRAME_TAIL)/kws_frame_shift;
+  kws_extract_features_with_frames(buffer, num_frames);
+
+out:
+  //cache the tail
+  kws_audio_cache_size = size-num_frames*kws_frame_shift;
+  memcpy(kws_audio_cache_buffer,buffer+num_frames*kws_frame_shift,sizeof(int16_t)*kws_audio_cache_size);
+}
+
 void kws_extract_features()
 {
-  if(kws_num_frames>recording_win) {
-    //move old features left
-    memmove(mfcc_buffer,mfcc_buffer+(recording_win*num_mfcc_features),(kws_num_frames-recording_win)*num_mfcc_features);
-  }
-  //compute features only for the newly recorded audio
-  int32_t mfcc_buffer_head = (kws_num_frames-recording_win)*num_mfcc_features;
-  for (uint16_t f = 0; f < recording_win; f++) {
-    mfcc_compute(kws_audio_buffer+(f*kws_frame_shift),&mfcc_buffer[mfcc_buffer_head]);
-    mfcc_buffer_head += num_mfcc_features;
-  }
+  if (!kws_audio_buffer)
+    return;
+
+  kws_extract_features_with_frames(kws_audio_buffer, recording_win);
 }
 
 void kws_classify()
 {
+  if (kws_state == KWS_STOPPED) {
+    memset(kws_output,0,sizeof(q7_t) * kws_num_out_classes);
+    kws_output[1] = 126;
+    return;
+  }
+
+  if (kws_state == KWS_SLEEPING) {
+    memset(kws_output,0,sizeof(q7_t) * kws_num_out_classes);
+    kws_output[0] = 126;
+    return;
+  }
+
   nn_run_nn(mfcc_buffer, kws_output);
   // Softmax
   arm_softmax_q7(kws_output,kws_num_out_classes,kws_output);

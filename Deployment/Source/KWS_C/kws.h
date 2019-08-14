@@ -30,6 +30,8 @@ extern "C"
 void kws_nn_init(int record_win, int sliding_win_len);
 void kws_nn_init_with_buffer(int16_t* audio_data_buffer);
 void kws_nn_deinit();
+void kws_enable(int enable);
+void kws_extract_features_with_buffer(int16_t *buffer, int size);
 void kws_extract_features();
 void kws_classify();
 void kws_average_predictions();

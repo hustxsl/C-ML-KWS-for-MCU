@@ -163,9 +163,10 @@ static float ** create_mel_fbank() {
   return mel_fbank;
 }
 
-void mfcc_compute(const int16_t * audio_data, q7_t* mfcc_out) {
+int mfcc_compute(const int16_t * audio_data, q7_t* mfcc_out) {
 
   int32_t i, j, bin;
+  int silence = 1;
 
   //TensorFlow way of normalizing .wav data to (-1,1)
   for (i = 0; i < frame_len; i++) {
@@ -192,6 +193,11 @@ void mfcc_compute(const int16_t * audio_data, q7_t* mfcc_out) {
   }
   buffer[0] = first_energy;
   buffer[half_dim] = last_energy;
+
+  for (i = 0; i < half_dim; i++) {
+    if (buffer[i] > 1)
+      silence = 0;
+  }
 
   float sqrt_data;
   //Apply mel filterbanks
@@ -233,5 +239,6 @@ void mfcc_compute(const int16_t * audio_data, q7_t* mfcc_out) {
       mfcc_out[i] = sum;
   }
 
+  return silence;
 }
 
