@@ -18,9 +18,30 @@ import cmath
 import numpy as np
 import os
 
+def write_ds_cnn_license(f):
+  f.write('/*\n')
+  f.write(' * Copyright (C) 2018 Arm Limited or its affiliates. All rights reserved.\n')
+  f.write(' *\n')
+  f.write(' * SPDX-License-Identifier: Apache-2.0\n')
+  f.write(' *\n')
+  f.write(' * Licensed under the Apache License, Version 2.0 (the License); you may\n')
+  f.write(' * not use this file except in compliance with the License.\n')
+  f.write(' * You may obtain a copy of the License at\n')
+  f.write(' *\n')
+  f.write(' * www.apache.org/licenses/LICENSE-2.0\n')
+  f.write(' *\n')
+  f.write(' * Unless required by applicable law or agreed to in writing, software\n')
+  f.write(' * distributed under the License is distributed on an AS IS BASIS, WITHOUT\n')
+  f.write(' * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n')
+  f.write(' * See the License for the specific language governing permissions and\n')
+  f.write(' * limitations under the License.\n')
+  f.write(' */\n\n')
+
 def write_ds_cnn_h_beginning(f, wanted_words, sample_rate, clip_duration_ms,
                              window_size_ms, window_stride_ms, dct_coefficient_count,
                              model_size_info, act_max):
+  write_ds_cnn_license(f)
+
   f.write("#ifndef __DS_CNN_H__\n")
   f.write("#define __DS_CNN_H__\n\n")
   f.write('#include "nn.h"\n')
@@ -105,6 +126,8 @@ def write_ds_cnn_c_file(fname, num_layers):
   f = open(fname, 'wb')
   f.close()
   with open(fname, 'a') as f:
+    write_ds_cnn_license(f)
+
     f.write('#include "ds_cnn.h"\n')
     f.write('#include "stdlib.h"\n\n')
 
