@@ -161,10 +161,8 @@ static void kws_extract_features_with_frames(int16_t *frames, int num_frames)
     if (kws_state != KWS_STARTED && !silence) {
       //printf("%s, %d starting!\n", __func__, __LINE__);
 
-      //fill the old features with silence
+      //fill the old features with unknown
       memset(mfcc_buffer,0,sizeof(q7_t)*(kws_num_frames-1)*num_mfcc_features);
-      for (int j = 0; j < kws_num_frames-1; j++)
-        mfcc_buffer[j*num_mfcc_features] = -127;
 
       kws_state = KWS_STARTED;
       break;
