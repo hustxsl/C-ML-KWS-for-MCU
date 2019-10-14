@@ -119,7 +119,7 @@ def write_ds_cnn_h_beginning(f, wanted_words, sample_rate, clip_duration_ms,
 
 def write_ds_cnn_h_end(f, num_layers):
   f.write(
-    '#define SCRATCH_BUFFER_SIZE (2*2*CONV1_OUT_CH*CONV2_DS_KX*CONV2_DS_KY + 2*CONV2_OUT_CH*CONV2_OUT_X*CONV2_OUT_Y)\n\n')
+    '#define SCRATCH_BUFFER_SIZE (2*2*CONV1_OUT_CH*CONV2_DS_KX*CONV2_DS_KY + 2*CONV2_OUT_CH*CONV1_OUT_X*CONV1_OUT_Y)\n\n')
   f.write('#endif\n')
 
 def write_ds_cnn_c_file(fname, num_layers):
